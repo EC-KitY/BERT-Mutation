@@ -9,7 +9,12 @@ from eckity.subpopulation import Subpopulation
 from ant_opt.artifial_ant_problem import AntSimulator, prog2, prog3
 from uniform_mutation import UniformNodeMutation
 
-
+"""
+Questions:
+1. I don't need float terminals, so how can I remove them?
+2. I need to compile each individual into python code and run it. How can I do that?
+3. the arity(func) is problematic when used with classes 
+"""
 class ArtificialAntEvaluator(SimpleIndividualEvaluator):
     def __init__(self, ant_instance):
         super().__init__()
@@ -20,6 +25,7 @@ class ArtificialAntEvaluator(SimpleIndividualEvaluator):
         # todo: somehow execute the individual
         # individual.execute()
         # self.ant.run(individual)
+        print(individual)
         return self.ant.eaten
 
 
@@ -66,10 +72,10 @@ function_arities = [
 algo = SimpleEvolution(
     Subpopulation(
         creators=HalfCreator(
-            init_depth=(2, 6),
+            init_depth=(3, 6),
             terminal_set=terminal_set,
             function_set=function_set,
-            erc_range=(-1.0, 1.0),
+            erc_range=None,
             bloat_weight=0.0001,
         ),
         population_size=100,
