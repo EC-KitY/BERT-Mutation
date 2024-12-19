@@ -17,8 +17,9 @@ class ArtificialAntEvaluator(SimpleIndividualEvaluator):
         self.ant = ant_instance
 
     def evaluate_individual(self, individual):
-        individual.execute()
-        self.ant.run(individual)
+        # todo: somehow execute the individual
+        # individual.execute()
+        # self.ant.run(individual)
         return self.ant.eaten
 
 
