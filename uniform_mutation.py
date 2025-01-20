@@ -77,6 +77,7 @@ class BERTUniformMutation(FailableOperator):
             bert_model: BertMutation,
             probability: float = 1.0,
             node_probability: float = 0.1,
+            max_trajectory_length=100,
             events=None,
             attempts=1,
     ):
@@ -85,6 +86,7 @@ class BERTUniformMutation(FailableOperator):
         )
         self.node_probability = node_probability
         self.bert_model = bert_model
+        self.max_trajectory_length = max_trajectory_length
 
     @override
     def attempt_operator(
@@ -105,7 +107,6 @@ class BERTUniformMutation(FailableOperator):
         assert len(individuals) == 1
         individual = individuals[0]
         mutation_mask = uniform_masks[0]
-
 
         allowed_functions = np.array(list(self.bert_model.function_mappings.keys()))
         allowed_functions_arity = np.array([arity(func) for func in list(self.bert_model.function_mappings.values())])
@@ -130,8 +131,13 @@ class BERTUniformMutation(FailableOperator):
     def _sample_masks(self, individuals: List[Tree]):
         masks = []
         for ind in individuals:
-            mask = np.random.choice([True, False], size=len(ind.tree),
-                                    p=[self.node_probability, 1 - self.node_probability])
+            if len(ind.tree) * self.node_probability < self.max_trajectory_length:
+                mask = np.random.choice([True, False], size=len(ind.tree),
+                                        p=[self.node_probability, 1 - self.node_probability])
+            else:
+                mask = np.random.choice([True, False], size=len(ind.tree),
+                                        p=[self.max_trajectory_length / len(ind.tree),
+                                           1 - self.max_trajectory_length / len(ind.tree)])
             masks.append(mask)
         return masks
 
