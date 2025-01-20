@@ -40,7 +40,7 @@ class BertMutation:
                  adam_decay=0,
                  epsilon_greedy=0.01, word_embedding_dim=120, context_size=2048, n_layers=3, n_attention_heads=3,
                  internal_size=128, clip_grad_norm=1.0, full_trajectory_query=True, diff_reward=True,
-                 function_mappings=None, terminals_mappings=None):
+                 function_mappings=None, terminals_mappings=None, higher_is_better=True, allow_constant_terminals=True):
 
         if constant_names is None:
             constant_names = []
@@ -62,7 +62,12 @@ class BertMutation:
         self.action_probabilities = []
         self.rewards = []
         self.batch_size = batch_size
-        self.terminals = np.array(constant_names + ['const'])
+
+        if allow_constant_terminals:
+            self.terminals = np.array(constant_names + ['const'])
+        else:
+            self.terminals = np.array(constant_names)
+
         self.token_encoder = LabelEncoder().fit(
             list(operators_list) + ['<mask>'] + list(self.terminals))
         self.mask_id = self.token_encoder.transform(['<mask>'])[0]
@@ -76,8 +81,15 @@ class BertMutation:
         self.full_trajectory_query = full_trajectory_query
         self.diff_reward = diff_reward
         self.function_mappings = function_mappings
-        self.terminals_mappings = {var: i for i, var in enumerate(constant_names)}
-        self.terminals_mappings['const'] = self.n_features
+
+        if terminals_mappings is None:
+            self.terminals_mappings = {var: i for i, var in enumerate(constant_names)}
+            if allow_constant_terminals:
+                self.terminals_mappings['const'] = self.n_features
+        else:
+            self.terminals_mappings = terminals_mappings
+
+        self.higher_is_better = higher_is_better
 
     def mutate(self, program_tokens, allowed_operators, tree_program, masked_nodes,
                arity_ndarray=None, allowed_operators_arity=None, terminal_traj=False):
@@ -89,12 +101,10 @@ class BertMutation:
         allowed_operators: list of allowed operators to be used in the mutation. Example: ['add', 'sub']
         tree_program: eckity object of the tree
         masked_nodes: indexes of the masked nodes in the program
-        mappings: dictionary of mappings between tokens and their function. Example: {'add': *function address*}
-        random_state: random state to control reproducibility
-        const_range: range of the constants
         arity_ndarray: numpy array of the arity of the masked nodes (length == masked_nodes length)
         allowed_operators_arity: numpy array of the arity of the allowed operators (length == allowed_operators length)
-
+        terminal_traj: boolean, if True, the mutation will be done on the terminal nodes, otherwise on
+        the function nodes
         Returns
         -------
 
@@ -127,18 +137,30 @@ class BertMutation:
                 current_mapping = self.function_mappings[current_mutation]
 
             if current_mutation == 'const':
-                rand_constant = random.uniform(*tree_program.erc_range)
+                if type(tree_program.erc_range[0]) is float:
+                    rand_constant = random.uniform(*tree_program.erc_range)
+                else:
+                    rand_constant = random.randint(*tree_program.erc_range)
+
                 tree_program.tree[node] = TerminalNode(rand_constant)
             elif current_mutation in self.function_mappings:
                 tree_program.tree[node] = FunctionNode(current_mapping)
             else:
-                tree_program.tree[node] = TerminalNode(current_mutation)
+                if callable(self.terminals_mappings[current_mutation]):
+                    tree_program.tree[node] = TerminalNode(self.terminals_mappings[current_mutation])
+                else:
+                    tree_program.tree[node] = TerminalNode(current_mutation)
 
         new_fitness = self.get_fitness_func(tree_program)
+
         if self.diff_reward:
-            reward = -(new_fitness - initial_fitness)
+            reward = (new_fitness - initial_fitness)
         else:
-            reward = -new_fitness
+            reward = new_fitness
+
+        if self.higher_is_better:
+            reward *= -1
+
         trajectory_probability = torch.log(torch.cat(trajectory_action_probabilities)).sum().unsqueeze(
             0).unsqueeze(0)
         self.rewards.append(torch.full_like(trajectory_probability, reward))
